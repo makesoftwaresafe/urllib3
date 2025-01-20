@@ -1,6 +1,9 @@
 name: lint
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: "read"
 
 jobs:
   lint:
@@ -8,16 +11,24 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v4
+      - name: "Checkout repository"
+        uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
         with:
-          python-version: "3.8"
+          persist-credentials: false
+
+      - name: "Setup Python"
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.x"
           cache: pip
-      - name: Lint the code
-        uses: pre-commit/action@v3.0.0
-      - name: Install dependencies
-        run: python3.8 -m pip install nox
-      - name: Run mypy
-        run: nox -s mypy
+
+      - name: "Run pre-commit"
+        uses: pre-commit/action@646c83fcd040023954eafda54b4db0192ce70507 # v3.0.0
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@b5f58b2abc5763ade55e4e9d0fe52cd1ff7979ca # v5.2.1
+        with:
+          version: "0.5.20"
+
+      - name: "Run mypy"
+        run: uvx nox -s mypy

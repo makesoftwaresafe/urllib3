@@ -1,6 +1,8 @@
+from __future__ import annotations
+
+import gc
 import socket
 from test import resolvesLocalhostFQDN
-from typing import Optional
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
@@ -8,7 +10,7 @@ import pytest
 
 from urllib3 import connection_from_url
 from urllib3.connectionpool import HTTPSConnectionPool
-from urllib3.exceptions import ClosedPoolError, LocationValueError
+from urllib3.exceptions import LocationValueError
 from urllib3.poolmanager import (
     _DEFAULT_BLOCKSIZE,
     PoolKey,
@@ -69,45 +71,22 @@ class TestPoolManager:
     def test_manager_clear(self) -> None:
         p = PoolManager(5)
 
-        conn_pool = p.connection_from_url("http://google.com")
+        p.connection_from_url("http://google.com")
         assert len(p.pools) == 1
-
-        conn = conn_pool._get_conn()
 
         p.clear()
         assert len(p.pools) == 0
 
-        with pytest.raises(ClosedPoolError):
-            conn_pool._get_conn()
-
-        conn_pool._put_conn(conn)
-
-        with pytest.raises(ClosedPoolError):
-            conn_pool._get_conn()
-
-        assert len(p.pools) == 0
-
     @pytest.mark.parametrize("url", ["http://@", None])
-    def test_nohost(self, url: Optional[str]) -> None:
+    def test_nohost(self, url: str | None) -> None:
         p = PoolManager(5)
         with pytest.raises(LocationValueError):
             p.connection_from_url(url=url)  # type: ignore[arg-type]
 
     def test_contextmanager(self) -> None:
         with PoolManager(1) as p:
-            conn_pool = p.connection_from_url("http://google.com")
+            p.connection_from_url("http://google.com")
             assert len(p.pools) == 1
-            conn = conn_pool._get_conn()
-
-        assert len(p.pools) == 0
-
-        with pytest.raises(ClosedPoolError):
-            conn_pool._get_conn()
-
-        conn_pool._put_conn(conn)
-
-        with pytest.raises(ClosedPoolError):
-            conn_pool._get_conn()
 
         assert len(p.pools) == 0
 
@@ -280,6 +259,27 @@ class TestPoolManager:
         assert pool is other_pool
         assert all(isinstance(key, PoolKey) for key in p.pools.keys())
 
+    @patch("urllib3.poolmanager.PoolManager.connection_from_host")
+    def test_deprecated_no_scheme(self, connection_from_host: mock.MagicMock) -> None:
+        # Don't actually make a network connection, just verify the DeprecationWarning
+        connection_from_host.side_effect = ConnectionError("Not attempting connection")
+        p = PoolManager()
+
+        with pytest.warns(DeprecationWarning) as records:
+            with pytest.raises(ConnectionError):
+                p.request(method="GET", url="evil.com://good.com")
+
+        msg = (
+            "URLs without a scheme (ie 'https://') are deprecated and will raise an error "
+            "in a future version of urllib3. To avoid this DeprecationWarning ensure all URLs "
+            "start with 'https://' or 'http://'. Read more in this issue: "
+            "https://github.com/urllib3/urllib3/issues/2920"
+        )
+
+        assert len(records) == 1
+        assert isinstance(records[0].message, DeprecationWarning)
+        assert records[0].message.args[0] == msg
+
     @patch("urllib3.poolmanager.PoolManager.connection_from_pool_key")
     def test_connection_from_context_strict_param(
         self, connection_from_pool_key: mock.MagicMock
@@ -296,7 +296,7 @@ class TestPoolManager:
 
         msg = (
             "The 'strict' parameter is no longer needed on Python 3+. "
-            "This will raise an error in urllib3 v3.0.0."
+            "This will raise an error in urllib3 v2.1.0."
         )
         record = records[0]
         assert isinstance(record.message, Warning)
@@ -468,3 +468,30 @@ class TestPoolManager:
         conn.connect()
 
         assert ssl_wrap_socket.call_args[1]["server_hostname"] == "a::b"
+
+    def test_thread_safty(self) -> None:
+        pool_manager = PoolManager(num_pools=2)
+
+        # thread 1 gets a pool for host x
+        pool_1 = pool_manager.connection_from_url("http://host_x:80/")
+
+        # thread 2 gets a pool for host y
+        pool_2 = pool_manager.connection_from_url("http://host_y:80/")
+
+        # thread 3 gets a pool for host z
+        pool_3 = pool_manager.connection_from_url("http://host_z:80")
+
+        # None of the pools should be closed, since all of them are referenced.
+        assert pool_1.pool is not None
+        assert pool_2.pool is not None
+        assert pool_3.pool is not None
+
+        conn_queue = pool_1.pool
+        assert conn_queue.qsize() > 0
+
+        # thread 1 stops.
+        del pool_1
+        gc.collect()
+
+        # Connection should be closed, because reference to pool_1 is gone.
+        assert conn_queue.qsize() == 0

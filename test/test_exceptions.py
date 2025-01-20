@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import pickle
+import socket
 from email.errors import MessageDefect
 from test import DUMMY_POOL
 
@@ -15,6 +18,7 @@ from urllib3.exceptions import (
     HTTPError,
     LocationParseError,
     MaxRetryError,
+    NameResolutionError,
     NewConnectionError,
     ReadTimeoutError,
 )
@@ -36,6 +40,8 @@ class TestPickle:
             EmptyPoolError(HTTPConnectionPool("localhost"), ""),
             HostChangedError(HTTPConnectionPool("localhost"), "/", 0),
             ReadTimeoutError(HTTPConnectionPool("localhost"), "/", ""),
+            NewConnectionError(HTTPConnection("localhost"), ""),
+            NameResolutionError("", HTTPConnection("localhost"), socket.gaierror()),
         ],
     )
     def test_exceptions(self, exception: Exception) -> None:
@@ -55,12 +61,12 @@ class TestNewConnectionError:
     def test_pool_property_deprecation_warning(self) -> None:
         err = NewConnectionError(HTTPConnection("localhost"), "test")
         with pytest.warns(DeprecationWarning) as records:
-            err.pool
+            err_pool = err.pool
 
-        assert err.pool is err.conn
+        assert err_pool is err.conn
         msg = (
             "The 'pool' property is deprecated and will be removed "
-            "in a later urllib3 v2.x release. use 'conn' instead."
+            "in urllib3 v2.1.0. Use 'conn' instead."
         )
         record = records[0]
         assert isinstance(record.message, Warning)

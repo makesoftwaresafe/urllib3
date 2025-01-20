@@ -1,42 +1,25 @@
-* [ ]  See if all tests, including integration, pass
+* [ ]  Draft a social media announcement
+* [ ]  See if all tests, including downstream, pass
 * [ ]  Get the release pull request approved by a [CODEOWNER](https://github.com/urllib3/urllib3/blob/main/.github/CODEOWNERS)
 * [ ]  Squash merge the release pull request with message "`Release <VERSION>`"
 * [ ]  Tag with X.Y.Z, push tag on urllib3/urllib3 (not on your fork, update `<REMOTE>` accordingly)
   * Notice that the `<VERSION>` shouldn't have a `v` prefix (Use `1.26.6` instead of `v.1.26.6`)
   * ```
-    git tag -a '<VERSION>' -m 'Release: <VERSION>'
-    git push <REMOTE> --tags
+    # Ensure the release commit is the latest in the main branch.
+    export VERSION=<X.Y.Z>
+    export REMOTE=origin
+    git checkout main
+    git pull $REMOTE main
+    git tag -s -a "$VERSION" -m "Release: $VERSION"
+    git push $REMOTE --tags
     ```
-* [ ]  Push to PyPI
-  * ```
-    cd /tmp
-    git clone ssh://git@github.com/urllib3/urllib3
-    cd urllib3
-    git checkout <TAG/VERSION>
-    python -m venv
-    source venv/bin/activate
-    python -m pip install -U pip
-    python -m pip install -U twine setuptools wheel build
-
-    # Set 'SOURCE_DATE_EPOCH' for build reproducibility.
-    export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
-    echo $SOURCE_DATE_EPOCH
-
-    python -m build
-
-    twine check dist/*
-    # Inspect the output to make sure it looks right
-    # Check versions, should be 1 wheel 1 sdist
-    
-    twine upload dist/*
-    ```
-* [ ]  Grab sdist and wheel from PyPI to attach to GitHub release
+* [ ]  The tag will trigger the `publish` GitHub workflow. This requires a review from a maintainer.
+* [ ]  Ensure that all expected artifacts are added to the new GitHub release. Should
+       be one `.whl`, one `.tar.gz`, and one `multiple.intoto.jsonl`. Update the GitHub
+       release to have the content of the release's changelog and any ongoing announcements.
 * [ ]  Announce on:
-  
-  * [ ]  GitHub releases
-  * [ ]  Twitter
+  * [ ]  Social media
   * [ ]  Discord
-  * [ ]  OpenCollective
-  * [ ]  GitCoin Grants
-* [ ]  Update Tidelift metadata
-* [ ]  If this was a 1.26.x release, add changes to the `main` branch
+  * [ ]  Open Collective
+* [ ]  Check [Tidelift security maintenance plan](https://tidelift.com/lifter/package/pypi/urllib3/tasks/packages_have_maintenance_plans>) is still correct
+* [ ]  If this was a 1.26.x release, add changelog to the `main` branch

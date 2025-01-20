@@ -1,0 +1,34 @@
+name: Downstream
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: "read"
+
+jobs:
+  downstream:
+    strategy:
+      fail-fast: false
+      matrix:
+        downstream: [botocore, requests]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@0ad4b8fadaa221de15dcec353f45205ec38ea70b # v4.1.4
+        with:
+          persist-credentials: false
+
+      - name: "Setup Python"
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.x"
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@b5f58b2abc5763ade55e4e9d0fe52cd1ff7979ca # v5.2.1
+        with:
+          version: "0.5.20"
+
+      - name: "Run downstream tests"
+        run: uvx nox -s downstream_${{ matrix.downstream }}

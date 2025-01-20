@@ -1,24 +1,15 @@
+from __future__ import annotations
+
 import io
+import typing
 from base64 import b64encode
 from enum import Enum
-from typing import (
-    IO,
-    TYPE_CHECKING,
-    Any,
-    AnyStr,
-    Dict,
-    Iterable,
-    List,
-    NamedTuple,
-    Optional,
-    Union,
-)
 
 from ..exceptions import UnrewindableBodyError
 from .util import to_bytes
 
-if TYPE_CHECKING:
-    from typing_extensions import Final
+if typing.TYPE_CHECKING:
+    from typing import Final
 
 # Pass as a value within ``headers`` to skip
 # emitting some HTTP headers that are added automatically.
@@ -30,15 +21,15 @@ SKIPPABLE_HEADERS = frozenset(["accept-encoding", "host", "user-agent"])
 ACCEPT_ENCODING = "gzip,deflate"
 try:
     try:
-        import brotlicffi as _unused_module_brotli  # type: ignore[import] # noqa: F401
+        import brotlicffi as _unused_module_brotli  # type: ignore[import-not-found] # noqa: F401
     except ImportError:
-        import brotli as _unused_module_brotli  # type: ignore[import] # noqa: F401
+        import brotli as _unused_module_brotli  # type: ignore[import-not-found] # noqa: F401
 except ImportError:
     pass
 else:
     ACCEPT_ENCODING += ",br"
 try:
-    import zstandard as _unused_module_zstd  # type: ignore[import] # noqa: F401
+    import zstandard as _unused_module_zstd  # noqa: F401
 except ImportError:
     pass
 else:
@@ -49,9 +40,9 @@ class _TYPE_FAILEDTELL(Enum):
     token = 0
 
 
-_FAILEDTELL: "Final[_TYPE_FAILEDTELL]" = _TYPE_FAILEDTELL.token
+_FAILEDTELL: Final[_TYPE_FAILEDTELL] = _TYPE_FAILEDTELL.token
 
-_TYPE_BODY_POSITION = Union[int, _TYPE_FAILEDTELL]
+_TYPE_BODY_POSITION = typing.Union[int, _TYPE_FAILEDTELL]
 
 # When sending a request with these methods we aren't expecting
 # a body so don't need to set an explicit 'Content-Length: 0'
@@ -62,13 +53,13 @@ _METHODS_NOT_EXPECTING_BODY = {"GET", "HEAD", "DELETE", "TRACE", "OPTIONS", "CON
 
 
 def make_headers(
-    keep_alive: Optional[bool] = None,
-    accept_encoding: Optional[Union[bool, List[str], str]] = None,
-    user_agent: Optional[str] = None,
-    basic_auth: Optional[str] = None,
-    proxy_basic_auth: Optional[str] = None,
-    disable_cache: Optional[bool] = None,
-) -> Dict[str, str]:
+    keep_alive: bool | None = None,
+    accept_encoding: bool | list[str] | str | None = None,
+    user_agent: str | None = None,
+    basic_auth: str | None = None,
+    proxy_basic_auth: str | None = None,
+    disable_cache: bool | None = None,
+) -> dict[str, str]:
     """
     Shortcuts for generating request headers.
 
@@ -77,8 +68,10 @@ def make_headers(
 
     :param accept_encoding:
         Can be a boolean, list, or string.
-        ``True`` translates to 'gzip,deflate'.  If either the ``brotli`` or
-        ``brotlicffi`` package is installed 'gzip,deflate,br' is used instead.
+        ``True`` translates to 'gzip,deflate'.  If the dependencies for
+        Brotli (either the ``brotli`` or ``brotlicffi`` package) and/or Zstandard
+        (the ``zstandard`` package) algorithms are installed, then their encodings are
+        included in the string ('br' and 'zstd', respectively).
         List will get joined by comma.
         String will be used as provided.
 
@@ -108,7 +101,7 @@ def make_headers(
         print(urllib3.util.make_headers(accept_encoding=True))
         # {'accept-encoding': 'gzip,deflate'}
     """
-    headers: Dict[str, str] = {}
+    headers: dict[str, str] = {}
     if accept_encoding:
         if isinstance(accept_encoding, str):
             pass
@@ -125,14 +118,14 @@ def make_headers(
         headers["connection"] = "keep-alive"
 
     if basic_auth:
-        headers[
-            "authorization"
-        ] = f"Basic {b64encode(basic_auth.encode('latin-1')).decode()}"
+        headers["authorization"] = (
+            f"Basic {b64encode(basic_auth.encode('latin-1')).decode()}"
+        )
 
     if proxy_basic_auth:
-        headers[
-            "proxy-authorization"
-        ] = f"Basic {b64encode(proxy_basic_auth.encode('latin-1')).decode()}"
+        headers["proxy-authorization"] = (
+            f"Basic {b64encode(proxy_basic_auth.encode('latin-1')).decode()}"
+        )
 
     if disable_cache:
         headers["cache-control"] = "no-cache"
@@ -141,8 +134,8 @@ def make_headers(
 
 
 def set_file_position(
-    body: Any, pos: Optional[_TYPE_BODY_POSITION]
-) -> Optional[_TYPE_BODY_POSITION]:
+    body: typing.Any, pos: _TYPE_BODY_POSITION | None
+) -> _TYPE_BODY_POSITION | None:
     """
     If a position is provided, move file to that point.
     Otherwise, we'll attempt to record a position for future use.
@@ -160,7 +153,7 @@ def set_file_position(
     return pos
 
 
-def rewind_body(body: IO[AnyStr], body_pos: _TYPE_BODY_POSITION) -> None:
+def rewind_body(body: typing.IO[typing.AnyStr], body_pos: _TYPE_BODY_POSITION) -> None:
     """
     Attempt to rewind body to a certain position.
     Primarily used for request redirects and retries.
@@ -190,13 +183,13 @@ def rewind_body(body: IO[AnyStr], body_pos: _TYPE_BODY_POSITION) -> None:
         )
 
 
-class ChunksAndContentLength(NamedTuple):
-    chunks: Optional[Iterable[bytes]]
-    content_length: Optional[int]
+class ChunksAndContentLength(typing.NamedTuple):
+    chunks: typing.Iterable[bytes] | None
+    content_length: int | None
 
 
 def body_to_chunks(
-    body: Optional[Any], method: str, blocksize: int
+    body: typing.Any | None, method: str, blocksize: int
 ) -> ChunksAndContentLength:
     """Takes the HTTP request method, body, and blocksize and
     transforms them into an iterable of chunks to pass to
@@ -207,8 +200,8 @@ def body_to_chunks(
     for framing instead.
     """
 
-    chunks: Optional[Iterable[bytes]]
-    content_length: Optional[int]
+    chunks: typing.Iterable[bytes] | None
+    content_length: int | None
 
     # No body, we need to make a recommendation on 'Content-Length'
     # based on whether that request method is expected to have
@@ -228,15 +221,15 @@ def body_to_chunks(
     # File-like object, TODO: use seek() and tell() for length?
     elif hasattr(body, "read"):
 
-        def chunk_readable() -> Iterable[bytes]:
+        def chunk_readable() -> typing.Iterable[bytes]:
             nonlocal body, blocksize
             encode = isinstance(body, io.TextIOBase)
             while True:
-                datablock = body.read(blocksize)  # type: ignore[union-attr]
+                datablock = body.read(blocksize)
                 if not datablock:
                     break
                 if encode:
-                    datablock = datablock.encode("iso-8859-1")
+                    datablock = datablock.encode("utf-8")
                 yield datablock
 
         chunks = chunk_readable()
